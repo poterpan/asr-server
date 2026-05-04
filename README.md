@@ -9,6 +9,10 @@ that feed cleanly into an LLM for summarization.
 
 [funasr]: https://github.com/modelscope/FunASR
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="funasr-server web UI showing API key field, audio drop zone, and a finished transcription with three speaker-labeled segments and copy/download buttons" width="720">
+</p>
+
 ## Highlights
 
 - **Speaker diarization** out of the box (FunASR `cam++`).
@@ -16,6 +20,31 @@ that feed cleanly into an LLM for summarization.
 - **LLM-optimized output**: same-speaker turns merged, coarse `MM:SS` anchors only — ~80% fewer framing tokens vs. line-per-segment markdown.
 - **Web UI** included (single HTML file, no build step). Drag-drop, polling, copy/download. Works from any browser.
 - **Bearer-token auth**, optional. Pluggable behind Cloudflare Access for SSO.
+
+## Pipeline
+
+```
+audio ─► VAD ─► ASR ─► Punctuation ─► Speaker labeling ─► OpenCC s2twp ─► output
+        fsmn-vad paraformer-zh  ct-punc        cam++         (server-side
+                                                              post-process)
+```
+
+| Stage | FunASR alias | Resolved ModelScope ID | Disk |
+|---|---|---|---|
+| Voice Activity Detection | `fsmn-vad` | `iic/speech_fsmn_vad_zh-cn-16k-common-pytorch` | ~4 MB |
+| Automatic Speech Recognition | `paraformer-zh` | `iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch` (SeACo-Paraformer-large with built-in hotword support) | ~950 MB |
+| Punctuation Restoration | `ct-punc` | `iic/punc_ct-transformer_cn-en-common-vocab471067-large` | ~1.2 GB |
+| Speaker Diarization | `cam++` | `iic/speech_campplus_sv_zh-cn_16k-common` | ~28 MB |
+| Simplified → Traditional | — | OpenCC `s2twp` (server post-process) | n/a |
+
+The four FunASR models are loaded once into GPU memory by `pipeline.py` and
+reused across all jobs. The `paraformer-zh` alias actually resolves to
+**SeACo-Paraformer-large** under the hood — that's why the `hotword` request
+parameter works.
+
+OpenCC conversion happens in Python after FunASR returns, before the
+result is stored. It can be disabled per-request with `?traditional=false`
+(the API call) or by unticking the box in the web UI.
 
 ## Hardware Requirements
 
