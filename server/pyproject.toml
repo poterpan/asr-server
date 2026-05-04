@@ -1,0 +1,28 @@
+[project]
+name = "funasr-server"
+version = "0.1.0"
+description = "FunASR meeting transcription HTTP service (ASR + VAD + punctuation + speaker diarization)"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "funasr>=1.3.0",
+    "torch>=2.5,<2.7",
+    "torchaudio>=2.5,<2.7",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.6",
+    "opencc-python-reimplemented>=0.1.7",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch       = { index = "pytorch-cu124" }
+torchaudio  = { index = "pytorch-cu124" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true

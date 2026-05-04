@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FunASR Server</title>
+  <style>
+    :root {
+      --bg: #0e1014;
+      --panel: #161a21;
+      --panel2: #1f2530;
+      --border: #2a313d;
+      --text: #e6e8eb;
+      --muted: #8b94a3;
+      --accent: #6ea8fe;
+      --accent-h: #93bcff;
+      --ok: #4ade80;
+      --warn: #facc15;
+      --err: #f87171;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 60px; }
+    h1 {
+      margin: 0 0 4px; font-size: 22px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+    h1 .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--muted); box-shadow: 0 0 8px currentColor;
+    }
+    h1 .dot.ok  { background: var(--ok); }
+    h1 .dot.err { background: var(--err); }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px; margin-bottom: 16px;
+    }
+    .panel h2 {
+      margin: 0 0 12px; font-size: 13px; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 10px 12px; border-radius: 6px;
+      background: var(--panel2); color: var(--text);
+      border: 1px solid var(--border);
+      font: inherit;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .row { display: flex; gap: 12px; align-items: center; }
+    .row > * { flex: 1; }
+    button {
+      background: var(--accent); color: #0a0e16;
+      border: 0; padding: 10px 16px; border-radius: 6px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover:not(:disabled) { background: var(--accent-h); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.ghost {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .drop {
+      border: 2px dashed var(--border); border-radius: 10px;
+      padding: 28px; text-align: center; transition: all .15s;
+      cursor: pointer;
+    }
+    .drop.over { border-color: var(--accent); background: var(--panel2); }
+    .drop input { display: none; }
+    .drop .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .opts {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;
+    }
+    .check {
+      display: flex; align-items: center; gap: 8px;
+      color: var(--text); font-size: 14px;
+    }
+    .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+    .progress {
+      height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden;
+      margin-top: 14px;
+    }
+    .progress > div {
+      height: 100%; background: var(--accent); width: 0;
+      transition: width .2s;
+    }
+    .status {
+      font: 13px var(--mono); color: var(--muted); margin-top: 10px;
+      min-height: 18px;
+    }
+    .status .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      background: var(--panel2); color: var(--text); margin-right: 6px;
+    }
+    .status .pill.ok  { background: rgba(74,222,128,.15); color: var(--ok); }
+    .status .pill.err { background: rgba(248,113,113,.15); color: var(--err); }
+    .result { margin-top: 14px; }
+    .seg {
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--panel2); margin-bottom: 8px;
+      display: grid; grid-template-columns: 88px 1fr; gap: 12px;
+    }
+    .seg .meta {
+      font: 12px var(--mono); color: var(--muted);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .seg .meta b { color: var(--accent); font-weight: 600; }
+    .seg .text { white-space: pre-wrap; word-break: break-word; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .err-box {
+      padding: 10px 12px; border-radius: 6px; margin-top: 10px;
+      background: rgba(248,113,113,.1); color: var(--err);
+      border: 1px solid rgba(248,113,113,.3);
+      font: 13px var(--mono);
+    }
+    .empty { color: var(--muted); padding: 14px; text-align: center; }
+    @media (max-width: 600px) {
+      .opts { grid-template-columns: 1fr; }
+      .seg { grid-template-columns: 1fr; }
+      .seg .meta { flex-direction: row; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span id="dot" class="dot"></span> FunASR Server</h1>
+  <div class="sub">RTX 3090 · paraformer-zh + fsmn-vad + ct-punc + cam++ · OpenCC s2twp</div>
+
+  <div class="panel">
+    <h2>API Key</h2>
+    <div class="row">
+      <input id="apikey" type="password" placeholder="paste FUNASR_API_KEY (stored in this browser only)">
+      <button id="saveKey" style="flex:0 0 auto;">Save</button>
+    </div>
+    <div class="status" id="keyStateLine"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Audio</h2>
+    <div id="drop" class="drop">
+      <div><b id="filename">Drop an audio file here</b></div>
+      <div class="hint">or click to choose · supports wav / mp3 / m4a / flac · up to ~2 hr</div>
+      <input id="file" type="file" accept="audio/*,.m4a,.wav,.mp3,.flac,.ogg">
+    </div>
+    <div class="opts">
+      <div>
+        <label for="hotword">Hotword (optional)</label>
+        <input id="hotword" type="text" placeholder="e.g. FunASR Paraformer">
+      </div>
+      <div>
+        <label>Output</label>
+        <label class="check"><input id="trad" type="checkbox" checked> Convert to Traditional Chinese (s2twp)</label>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <button id="go">Transcribe</button>
+      <button id="cancel" class="ghost" disabled>Cancel polling</button>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="status" id="status"></div>
+    <div id="errBox"></div>
+  </div>
+
+  <div class="panel" id="resultPanel" style="display:none;">
+    <h2>Result <span id="resultCount" style="color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0;"></span></h2>
+    <div class="actions">
+      <button id="copyLlm"  class="ghost">Copy for LLM</button>
+      <button id="copyMd"   class="ghost">Copy Markdown</button>
+      <button id="dlLlm"    class="ghost">Download .txt (LLM)</button>
+      <button id="dlMd"     class="ghost">Download .md</button>
+      <button id="dlJson"   class="ghost">Download .json</button>
+    </div>
+    <div class="result" id="result"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const STORE_KEY = 'funasr_api_key';
+
+  // Build a DOM element with attrs and children. Children may be strings
+  // (added as text nodes) or other Nodes.
+  function el(tag, attrs, ...children) {
+    const e = document.createElement(tag);
+    if (attrs) {
+      for (const k in attrs) {
+        if (k === 'class') e.className = attrs[k];
+        else if (k === 'style') e.setAttribute('style', attrs[k]);
+        else e[k] = attrs[k];
+      }
+    }
+    for (const c of children.flat()) {
+      if (c == null) continue;
+      e.append(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  // --- API key handling ---------------------------------------------------
+  const keyInput  = $('apikey');
+  const keyState  = $('keyStateLine');
+  const saveBtn   = $('saveKey');
+  const dot       = $('dot');
+
+  const loadKey = () => localStorage.getItem(STORE_KEY) || '';
+  const setKey  = (v) => v ? localStorage.setItem(STORE_KEY, v) : localStorage.removeItem(STORE_KEY);
+
+  keyInput.value = loadKey();
+  refreshKeyState();
+  saveBtn.addEventListener('click', () => { setKey(keyInput.value.trim()); refreshKeyState(); });
+
+  function refreshKeyState() {
+    clear(keyState);
+    const k = loadKey();
+    if (k) {
+      keyState.append(
+        el('span', { class: 'pill ok' }, 'stored'),
+        ' …' + k.slice(-6)
+      );
+    } else {
+      keyState.append(
+        el('span', { class: 'pill err' }, 'not set'),
+        ' API calls will fail'
+      );
+    }
+  }
+
+  function authHeader() {
+    const k = loadKey();
+    return k ? { 'Authorization': 'Bearer ' + k } : {};
+  }
+
+  // --- Health probe -------------------------------------------------------
+  fetch('/health')
+    .then(r => dot.classList.add(r.ok ? 'ok' : 'err'))
+    .catch(() => dot.classList.add('err'));
+
+  // --- File drop / pick ---------------------------------------------------
+  const drop      = $('drop');
+  const fileInput = $('file');
+  const filename  = $('filename');
+  let selectedFile = null;
+
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => setFile(e.target.files[0]));
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  function setFile(f) {
+    if (!f) return;
+    selectedFile = f;
+    filename.textContent = `${f.name} · ${(f.size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // --- Submit + poll ------------------------------------------------------
+  const goBtn      = $('go');
+  const cancelBtn  = $('cancel');
+  const bar        = $('bar');
+  const statusEl   = $('status');
+  const errBox     = $('errBox');
+  const resultPanel= $('resultPanel');
+  const resultEl   = $('result');
+  const resultCnt  = $('resultCount');
+
+  let polling = null;
+  let currentJob = null;
+
+  goBtn.addEventListener('click', start);
+  cancelBtn.addEventListener('click', cancelPoll);
+  $('copyLlm').addEventListener('click', () => fetchAndCopy('llm'));
+  $('copyMd').addEventListener('click',  () => fetchAndCopy('md'));
+  $('dlLlm').addEventListener('click',   () => download('llm'));
+  $('dlMd').addEventListener('click',    () => download('md'));
+  $('dlJson').addEventListener('click',  () => download('json'));
+
+  async function start() {
+    if (!selectedFile) { setStatus('warn', 'Pick a file first.'); return; }
+    if (!loadKey())    { setStatus('warn', 'Save your API key first.'); return; }
+    clear(errBox);
+    resultPanel.style.display = 'none';
+    clear(resultEl);
+    goBtn.disabled = true; cancelBtn.disabled = false;
+
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    const hw = $('hotword').value.trim();
+    if (hw) fd.append('hotword', hw);
+    fd.append('traditional', $('trad').checked ? 'true' : 'false');
+
+    setStatus('busy', `Uploading ${selectedFile.name} …`);
+    bar.style.width = '0%';
+
+    let resp;
+    try {
+      resp = await uploadWithProgress('/transcribe', fd);
+    } catch (e) {
+      bar.style.width = '0%';
+      goBtn.disabled = false; cancelBtn.disabled = true;
+      showError(`Upload failed: ${e.message}`);
+      return;
+    }
+
+    if (!resp.ok) {
+      bar.style.width = '0%';
+      goBtn.disabled = false; cancelBtn.disabled = true;
+      showError(`HTTP ${resp.status}: ${resp.bodyText}`);
+      return;
+    }
+
+    const data = JSON.parse(resp.bodyText);
+    currentJob = data.job_id;
+    bar.style.width = '100%';
+    setStatus('busy', `queued · job ${currentJob.slice(0, 8)}…`);
+    poll();
+  }
+
+  function uploadWithProgress(url, formData) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      const auth = authHeader();
+      if (auth.Authorization) xhr.setRequestHeader('Authorization', auth.Authorization);
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + '%';
+      });
+      xhr.onload  = () => resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        bodyText: xhr.responseText,
+      });
+      xhr.onerror = () => reject(new Error('network error'));
+      xhr.send(formData);
+    });
+  }
+
+  function poll() {
+    const t0 = Date.now();
+    polling = setInterval(async () => {
+      try {
+        const r = await fetch(`/jobs/${currentJob}`, { headers: authHeader() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+        if (j.status === 'done') {
+          stopPoll();
+          setStatus('ok', `done · ${elapsed}s`);
+          await loadResult(currentJob);
+        } else if (j.status === 'failed') {
+          stopPoll();
+          setStatus('err', `failed · ${elapsed}s`);
+          showError(j.error || 'job failed');
+        } else {
+          setStatus('busy', `${j.status} · ${elapsed}s`);
+        }
+      } catch (e) {
+        stopPoll();
+        showError(`Polling error: ${e.message}`);
+      }
+    }, 3000);
+  }
+
+  function cancelPoll() {
+    stopPoll();
+    setStatus('warn', `polling cancelled · job ${currentJob ? currentJob.slice(0, 8) : '?'}… still running on server`);
+  }
+
+  function stopPoll() {
+    if (polling) { clearInterval(polling); polling = null; }
+    goBtn.disabled = false; cancelBtn.disabled = true;
+  }
+
+  async function loadResult(jobId) {
+    const r = await fetch(`/jobs/${jobId}/result?format=json`, { headers: authHeader() });
+    if (!r.ok) { showError(`Failed to fetch result: HTTP ${r.status}`); return; }
+    const data = await r.json();
+    renderSegments(data.segments || []);
+  }
+
+  function renderSegments(segs) {
+    resultPanel.style.display = 'block';
+    resultCnt.textContent = `· ${segs.length} segment${segs.length === 1 ? '' : 's'}`;
+    clear(resultEl);
+    if (segs.length === 0) {
+      resultEl.append(el('div', { class: 'empty' }, '(no speech detected)'));
+      return;
+    }
+    for (const s of segs) {
+      const meta = el('div', { class: 'meta' },
+        el('b', null, 'S' + s.speaker),
+        el('span', null, fmtTs(s.start)),
+        el('span', null, fmtTs(s.end)),
+      );
+      const text = el('div', { class: 'text', textContent: s.text });
+      resultEl.append(el('div', { class: 'seg' }, meta, text));
+    }
+  }
+
+  function fmtTs(s) {
+    const sec = Math.floor(s);
+    const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = sec % 60;
+    return [h, m, ss].map(n => String(n).padStart(2, '0')).join(':');
+  }
+
+  async function fetchAndCopy(format) {
+    if (!currentJob) return;
+    const r = await fetch(`/jobs/${currentJob}/result?format=${format}`, { headers: authHeader() });
+    if (!r.ok) { setStatus('err', `${format} fetch HTTP ${r.status}`); return; }
+    const text = await r.text();
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus('ok', `${format} copied (${text.length} chars)`);
+    } catch {
+      setStatus('warn', 'clipboard blocked');
+    }
+  }
+
+  async function download(format) {
+    if (!currentJob) return;
+    const r = await fetch(`/jobs/${currentJob}/result?format=${format}`, { headers: authHeader() });
+    if (!r.ok) { setStatus('err', `${format} fetch HTTP ${r.status}`); return; }
+    const body = format === 'json'
+      ? JSON.stringify(await r.json(), null, 2)
+      : await r.text();
+    const ext = format === 'llm' ? 'txt' : format;
+    const mime =
+      format === 'json' ? 'application/json' :
+      format === 'md'   ? 'text/markdown' :
+                          'text/plain';
+    const blob = new Blob([body], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${currentJob.slice(0, 8)}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function setStatus(kind, msg) {
+    clear(statusEl);
+    const cls = kind === 'ok' ? 'pill ok' : (kind === 'err' || kind === 'warn') ? 'pill err' : 'pill';
+    statusEl.append(el('span', { class: cls }, kind), ' ' + msg);
+  }
+
+  function showError(msg) {
+    clear(errBox);
+    errBox.append(el('div', { class: 'err-box', textContent: msg }));
+  }
+})();
+</script>
+</body>
+</html>

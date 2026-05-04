@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Claude Code local state
+.claude/
+
+# server-side runtime artifacts (not synced from WSL)
+server/.venv/
+server/outputs/
+server/.env
+server/test_audio.*

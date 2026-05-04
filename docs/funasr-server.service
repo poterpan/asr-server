@@ -1,0 +1,46 @@
+# Template systemd unit for funasr-server.
+#
+# Edit User=, WorkingDirectory=, and the uv path inside ExecStart=, then:
+#   sudo cp docs/funasr-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now funasr-server
+#
+# Tail logs:
+#   journalctl -u funasr-server -f
+
+[Unit]
+Description=FunASR meeting-transcription server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=funasr
+Group=funasr
+
+# Adjust to wherever the repo lives on your host.
+WorkingDirectory=/opt/asr-server/server
+
+# Pulls FUNASR_API_KEY etc. from a 0600-mode .env beside the code.
+EnvironmentFile=/opt/asr-server/server/.env
+
+# Use the absolute path to the user's uv binary. Find it with `which uv`.
+# If uv is installed for a different user, run `sudo -u funasr which uv`.
+ExecStart=/home/funasr/.local/bin/uv run uvicorn server:app \
+    --host 127.0.0.1 \
+    --port 8920 \
+    --log-level info \
+    --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+# Reasonable hardening defaults — relax if your setup needs more access.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/asr-server/server/outputs /home/funasr/.cache/modelscope
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
