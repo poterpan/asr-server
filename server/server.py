@@ -219,4 +219,11 @@ if STATIC_DIR.is_dir():
 
     @app.get("/", include_in_schema=False)
     def root() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+        # no-cache: force revalidation so every page load passes through
+        # Cloudflare Access and silently renews an expired session cookie;
+        # a heuristically-cached page skips CF and its XHRs die on the stale
+        # cookie with an opaque CORS "network error"
+        return FileResponse(
+            STATIC_DIR / "index.html",
+            headers={"Cache-Control": "no-cache"},
+        )

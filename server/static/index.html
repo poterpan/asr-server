@@ -243,6 +243,69 @@
     return k ? { 'Authorization': 'Bearer ' + k } : {};
   }
 
+  // --- Cloudflare Access session guard --------------------------------------
+  // The site sits behind Cloudflare Access. When the app session cookie
+  // expires, fetch/XHR get 302-redirected cross-origin to the login page and
+  // die as an opaque "network error" — but a top-level navigation renews the
+  // cookie silently. So: probe the session, and when it is dead, stash the
+  // pending job in IndexedDB, reload to re-auth, then resume.
+  const RELOAD_TS = 'funasr_reauth_ts';
+
+  async function accessSessionDead() {
+    try {
+      const r = await fetch('/cdn-cgi/access/get-identity', { redirect: 'manual', cache: 'no-store' });
+      return r.type === 'opaqueredirect';
+    } catch {
+      return false; // probe unavailable (offline / not behind Access) — let the real request decide
+    }
+  }
+
+  function recentlyReloaded() {
+    return Date.now() - Number(sessionStorage.getItem(RELOAD_TS) || 0) < 30000;
+  }
+
+  function reloadForReauth() {
+    sessionStorage.setItem(RELOAD_TS, String(Date.now()));
+    location.reload();
+  }
+
+  // Single-key IndexedDB stash: localStorage cannot hold a File object.
+  function pendingStore(mode, payload) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('funasr_pending', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('jobs');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction('jobs', 'readwrite');
+        const store = tx.objectStore('jobs');
+        let result = null;
+        if (mode === 'put') {
+          store.put(payload, 'pending');
+        } else {
+          const get = store.get('pending');
+          get.onsuccess = () => { result = get.result || null; };
+          store.delete('pending');
+        }
+        tx.oncomplete = () => { db.close(); resolve(result); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+  }
+
+  async function stashAndReauth() {
+    setStatus('busy', 'Access session expired — reloading to renew…');
+    try {
+      await pendingStore('put', {
+        file: selectedFile,
+        hotword: $('hotword').value,
+        traditional: $('trad').checked,
+        ts: Date.now(),
+      });
+    } catch { /* resume is best-effort; re-auth matters more */ }
+    reloadForReauth();
+  }
+
   // --- Health probe -------------------------------------------------------
   fetch('/health')
     .then(r => dot.classList.add(r.ok ? 'ok' : 'err'))
@@ -299,6 +362,13 @@
     clear(resultEl);
     goBtn.disabled = true; cancelBtn.disabled = false;
 
+    if (await accessSessionDead()) {
+      if (!recentlyReloaded()) { await stashAndReauth(); return; }
+      goBtn.disabled = false; cancelBtn.disabled = true;
+      showError('Cloudflare Access session expired and auto-renew failed — please reload or sign in again.');
+      return;
+    }
+
     const fd = new FormData();
     fd.append('file', selectedFile);
     const hw = $('hotword').value.trim();
@@ -313,6 +383,10 @@
       resp = await uploadWithProgress('/transcribe', fd);
     } catch (e) {
       bar.style.width = '0%';
+      if (e.message === 'network error' && !recentlyReloaded() && await accessSessionDead()) {
+        await stashAndReauth();
+        return;
+      }
       goBtn.disabled = false; cancelBtn.disabled = true;
       showError(`Upload failed: ${e.message}`);
       return;
@@ -462,6 +536,27 @@
     clear(errBox);
     errBox.append(el('div', { class: 'err-box', textContent: msg }));
   }
+
+  // --- Resume after a re-auth reload ----------------------------------------
+  (async () => {
+    let pending = null;
+    try { pending = await pendingStore('take'); } catch { /* no stash */ }
+    if (pending && pending.file && Date.now() - pending.ts < 120000) {
+      setFile(pending.file);
+      $('hotword').value = pending.hotword || '';
+      $('trad').checked = !!pending.traditional;
+      setStatus('busy', 'session renewed — resuming upload…');
+      start();
+    } else if (await accessSessionDead()) {
+      // page came from cache with a stale cookie — renew via navigation,
+      // but never loop if the session stays dead after a reload
+      if (recentlyReloaded()) {
+        setStatus('err', 'Cloudflare Access session expired — please reload or sign in again.');
+      } else {
+        reloadForReauth();
+      }
+    }
+  })();
 })();
 </script>
 </body>
